@@ -1,0 +1,4 @@
+# Optional upgrades — not needed to run or test the project.
+# Real semantic embeddings (downloads a small model on first use):
+#   EMBEDDINGS=sentence-transformers
+sentence-transformers>=3,<6
