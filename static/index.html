@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>rag-doc-qa</title>
+<style>
+  :root { --bg:#0f1220; --card:#181c2e; --fg:#e7e9f3; --muted:#9aa0b5; --accent:#7c9cff; --border:#2a2f47; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--fg); }
+  .wrap { max-width:760px; margin:0 auto; padding:40px 20px 80px; }
+  header { display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
+  h1 { font-size:22px; margin:0; letter-spacing:.2px; }
+  .badge { font-size:12px; color:var(--muted); }
+  p.sub { color:var(--muted); margin:6px 0 24px; }
+  form { display:flex; gap:10px; }
+  input[type=text] { flex:1; padding:12px 14px; border-radius:10px; border:1px solid var(--border); background:var(--card); color:var(--fg); font-size:15px; }
+  input[type=text]:focus { outline:none; border-color:var(--accent); }
+  button { padding:12px 18px; border-radius:10px; border:0; background:var(--accent); color:#0b0e1a; font-weight:600; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:default; }
+  .answer { margin-top:26px; padding:18px 20px; background:var(--card); border:1px solid var(--border); border-radius:12px; white-space:pre-wrap; min-height:20px; }
+  .cites { margin-top:18px; }
+  .cites h3 { font-size:13px; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); margin:0 0 10px; }
+  .cite { padding:12px 14px; border:1px solid var(--border); border-radius:10px; margin-bottom:10px; background:#141829; }
+  .cite .src { font-size:13px; color:var(--accent); display:flex; justify-content:space-between; }
+  .cite .snip { font-size:13px; color:var(--muted); margin-top:6px; }
+  .examples { margin-top:14px; display:flex; flex-wrap:wrap; gap:8px; }
+  .chip { font-size:13px; color:var(--muted); border:1px solid var(--border); border-radius:999px; padding:5px 12px; cursor:pointer; background:transparent; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>rag-doc-qa</h1>
+      <span class="badge" id="badge">…</span>
+    </header>
+    <p class="sub">Ask a question — answers are grounded in the ingested documents and cite their sources.</p>
+
+    <form id="form">
+      <input id="q" type="text" placeholder="e.g. What is retrieval-augmented generation?" autocomplete="off" />
+      <button id="go" type="submit">Ask</button>
+    </form>
+    <div class="examples" id="examples"></div>
+
+    <div class="answer" id="answer">Ask something to get started.</div>
+    <div class="cites" id="cites"></div>
+  </div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const EXAMPLES = [
+  "What is retrieval-augmented generation?",
+  "Why chunk documents before embedding?",
+  "How does the vector store rank results?",
+];
+
+async function refreshHealth() {
+  try {
+    const r = await fetch("/healthz");
+    const h = await r.json();
+    $("badge").textContent = `model: ${h.provider} · embedder: ${h.embedder} · store: ${h.vector_store} · ${h.chunks} chunks`;
+  } catch { $("badge").textContent = "offline"; }
+}
+
+function renderExamples() {
+  EXAMPLES.forEach((ex) => {
+    const b = document.createElement("button");
+    b.className = "chip"; b.type = "button"; b.textContent = ex;
+    b.onclick = () => { $("q").value = ex; $("form").requestSubmit(); };
+    $("examples").appendChild(b);
+  });
+}
+
+$("form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const question = $("q").value.trim();
+  if (!question) return;
+  $("go").disabled = true;
+  $("answer").textContent = "Thinking…";
+  $("cites").innerHTML = "";
+  try {
+    const r = await fetch("/ask", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question }),
+    });
+    const data = await r.json();
+    $("answer").textContent = data.answer || "(no answer)";
+    if (data.citations?.length) {
+      $("cites").innerHTML = "<h3>Sources</h3>";
+      data.citations.forEach((c, i) => {
+        const d = document.createElement("div");
+        d.className = "cite";
+        d.innerHTML = `<div class="src"><span>[${i + 1}] ${c.source}</span><span>score ${c.score}</span></div><div class="snip">${c.snippet}</div>`;
+        $("cites").appendChild(d);
+      });
+    }
+  } catch (err) {
+    $("answer").textContent = "Request failed: " + err;
+  } finally {
+    $("go").disabled = false;
+  }
+});
+
+renderExamples();
+refreshHealth();
+</script>
+</body>
+</html>
